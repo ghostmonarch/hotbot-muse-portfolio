@@ -1,73 +1,78 @@
-# HOTBOT
+<p align="center"><img src="muse-agent/public/hotbot.png" width="72" height="72" alt="HotBot" /></p>
 
-**Your own AI trading team for Solana memecoins.** Live at [usehotbot.com](https://usehotbot.com).
+<h1 align="center">HotBot × Muse</h1>
 
-You describe a strategy in plain words. A team of agents finds coins, checks them for scams, buys and manages the exits, every second of the day:
+<p align="center">Bring HotBot’s trading intelligence into a conversation with Muse. Explore a paper portfolio and review changes in everyday language.</p>
 
-- **ResearchBot** checks every new launch against your strategy and scores it.
-- **ShieldBot** blocks rugs and scams, from the coin's first block.
-- **SniperBot** picks the entry.
-- **TraderBot** buys and manages each exit live.
-- **HOTBOT** is the orchestrator you talk to.
+<p align="center"><a href="SUBMISSION.md">Submission & rubric</a> · <a href="#workflow">Workflow</a> · <a href="#quickstart">Quickstart</a> · <a href="#verification">Verification</a> · <a href="#scope">Scope</a> · <a href="#license">MIT License</a></p>
 
-You build and change strategies by chat: the AI drafts the rules, and you apply each change with one tap. Strategies run on paper first and move to real SOL when you choose. Portfolios hold a themed basket of coins, managed by an agent. You can also connect your own AI (Muse, Claude, ChatGPT, Cursor) through our MCP server.
+## Workflow
 
-## Use HOTBOT from Muse
+1. **Investigate a decision.** Ask whether recent activity matches the portfolio’s original instructions.
+2. **Inspect the evidence.** Expand a source to see its tool, exact field, returned value, and read time.
+3. **Review one change.** Compare the current and proposed setting, its reason, and its tradeoff. Nothing is applied from this chat.
 
-[Muse](https://www.meta.com/help/artificial-intelligence/1687253048996149/), Meta's personal agent on the Muse Spark models, connects to HOTBOT as a custom connector. Muse reads your team, explains why a strategy wins or loses, and previews a change before you apply it.
+The recorded walkthrough asks why HotBot passed on ELEVEN, then bought it about five minutes later. It compares both journal records and requests a change requiring approval before ordinary trades. This is a real account’s paper history; another account will contain different records.
 
-1. In Muse, open **Settings → Connectors → Add custom connector**, or send Muse this message:
+The new interface runs locally. Its balances and results are simulated. It is not a claim that the Muse interface has been deployed to the existing HotBot service. The video is a separate artifact, not bundled here.
 
-   ```
-   Create a Custom Connector for a new remote MCP server, then connect to it:
-   Name: HOTBOT
-   Transport: remote streamable HTTP
-   URL: https://api.usehotbot.com/mcp
-   Auth: OAuth
-   ```
+```mermaid
+flowchart LR
+    UI["HotBot portfolio UI<br/>Muse Chat"] --> Proxy["Local Next.js proxy"]
+    Proxy --> Bridge["Node.js bridge<br/>Scoped reads + source/proposal checks"]
+    Bridge <--> Meta["Meta Model API<br/>Muse Spark 1.3"]
+    Bridge <--> MCP["HOTBOT MCP<br/>Private backend"]
+```
 
-2. Muse opens HOTBOT. Sign in, check the app and its address, and tap **Allow**. The connection only reads until you turn on **Can trade**.
-3. Ask Muse: *"Read my HOTBOT team and stats. Which strategy works, which does not, and why? Preview one change before you make it."*
+The bridge holds provider credentials. The native UI receives read results and conversation events, never those credentials.
 
-You see each connected agent on the Account page under **Your agents**, and you delete it there to cut it off at once.
+## Quickstart
 
-### Tools
+You need **Node.js 22+**, **Bun**, a **Meta Model API key** with access to `muse-spark-1.3`, and a **read-only HOTBOT MCP token** for an accessible account with a themed paper portfolio. A consumer Muse login alone does not configure this module.
 
-| Tool | Kind | What it does |
-|---|---|---|
-| `get_team`, `get_stats`, `get_activity`, `get_funnel`, `get_trades`, `get_decisions` | Read | The team, each strategy's results, its funnel, its sales and the bots' decisions |
-| `get_coin`, `search_coins` | Read | One coin as the team sees it, or a search by mint or symbol |
-| `get_reference` | Read | Every setting a strategy takes, with its unit and range, and the exit plans |
-| `list_portfolios`, `get_portfolio` | Read | Themed portfolios and their journals |
-| `update_strategy` | Write | Changes a strategy's settings. `preview` checks the change and saves nothing |
-| `create_strategy`, `strategy_action` | Write | Makes a strategy, or pauses, runs or archives one |
-| `draft_portfolio`, `start_portfolio`, `portfolio_action`, `set_portfolio_limits`, `answer_portfolio_ask` | Write | Drafts, starts and manages themed portfolios on paper |
-| `coin_action` | Sensitive write | Approves, buys or sells one coin |
-| `team_action` | Sensitive write | Sells every coin, stops or resumes every strategy, or resets practice |
+In HotBot’s Account page, open **Your agents → New key** and leave **Can trade** off. Copy the one-time key locally.
 
-Every write needs a connection with **Can trade** on. Sign-in is OAuth 2.1 with PKCE, and HOTBOT stores only a hash of each token.
+**Terminal 1 — from the repository root:**
 
-## How it works
+```sh
+cp muse-agent/.env.example muse-agent/.env
+# Fill MODEL_API_KEY and HOTBOT_MCP_TOKEN in the local .env.
+cd muse-agent
+node --env-file=.env server.mjs
+```
 
-- **Our own Solana indexer (Rust)** reads the validator stream directly and decodes the launchpads and AMMs coins trade on. Each coin's live state is less than 50 ms behind the chain.
-- **Scam protection from block 0** reads authorities, transfer fees, launch origin, deployer history and early-buyer wallets before any buy. When one team catches a rugger, every team is protected.
-- **A real-time strategy engine** checks every rule and every exit in code on each price update. The agents decide on top of this protective floor and can never loosen it.
-- **Our own ML models** are trained on our on-chain dataset of every launch.
-- **Solana throughout:** sign-in with a Solana wallet, swaps sent from each user's own wallet, and models trained on replays of the full block archive.
+**Terminal 2 — from the repository root:**
 
-## This repository
+```sh
+bun install --frozen-lockfile --ignore-scripts
+cd client
+bun --bun next dev --hostname 127.0.0.1 --port 3000
+```
 
-This is the web client: Next.js, React and Convex. The backend, the MCP server, the indexer, the models, the website's server routes and the production thresholds are private.
+Open **http://127.0.0.1:3000/muse-preview**, then **Chat**. The preview reuses the existing portfolio, sidebar, team panel, and styles without private Convex account startup. Ordinary app routes retain their authentication. Completed `.env` files are ignored by Git.
 
-| Path | What |
+The private HotBot backend and hosted MCP service remain external dependencies. This source alone cannot provision account access or a portfolio. See [full setup and recording instructions](muse-agent/README.md).
+
+## Verification
+
+From the repository root:
+
+```sh
+(cd muse-agent && npm test)
+(cd client && bun run typecheck)
+```
+
+The current implementation passed **18 isolated bridge tests**, TypeScript checking, and a separate live walkthrough. Mock transport tests do not prove a judge’s provider access works. Source checks establish provenance, not the correctness of every model interpretation or recommendation. The unvalidated holding comparison is excluded; missing MCP fields are not reconstructed.
+
+## Scope
+
+| Built for this submission | Existing HotBot foundation |
 |---|---|
-| `client/src/components/team` | The team app: home, strategies, settings, the Lab, the chat with HOTBOT, the wallet and Your agents |
-| `client/src/components/hotbot` | The HOTBOT characters and the landing page |
-| `client/convex/api.ts` | The backend functions that the client calls, with their arguments and results |
-| `types/` | The contracts that the client and the backend share. Every scam and research check is listed with its label and target. A `PRIVATE` value is a placeholder for a production number. |
+| Muse tool loop, streaming reads, source receipts, advisory proposals | Portfolios, trading agents, MCP server |
+| Muse Chat integration and local MCP adapters | Native React portfolio UI, sidebars, shared contracts |
 
-The client needs the HOTBOT backend to run. To read and type-check it: `bun install && bun run typecheck`.
+The foundation comes from [0xwhoismax/hotbot at 069a874](https://github.com/0xwhoismax/hotbot/tree/069a87403703f0c0ce22c6eef0058a82cea9afcc). [UPSTREAM_README.md](UPSTREAM_README.md) preserves its original documentation and historical rights wording byte for byte.
 
 ## License
 
-Copyright HOTBOT. All rights reserved. You can read this code. You cannot copy, change or redistribute it.
+HOTBOT-authored software in this repository is available under the [MIT License](LICENSE). Third-party dependencies, Meta’s models, and external services retain their own terms; their code and services are not licensed by this repository.

@@ -4,13 +4,17 @@
 
 <p align="center">Bring HotBot’s trading intelligence into a conversation with Muse. Explore a paper portfolio and review changes in everyday language.</p>
 
-<p align="center"><a href="SUBMISSION.md">Submission & rubric</a> · <a href="#workflow">Workflow</a> · <a href="#quickstart">Quickstart</a> · <a href="#verification">Verification</a> · <a href="#scope">Scope</a> · <a href="#license">MIT License</a></p>
+<p align="center"><a href="https://youtu.be/N2t3SKpPfgo">Watch the demo</a> · <a href="SUBMISSION.md">Submission & rubric</a> · <a href="#workflow">Workflow</a> · <a href="#quickstart">Quickstart</a> · <a href="#verification">Verification</a> · <a href="#scope">Scope</a> · <a href="#license">MIT License</a></p>
+
+Our vision is intelligent agentic trading as easy as talking to Muse. HotBot supplies the trading team, portfolio tools and controls; Muse lets a person ask what happened, understand the records and express how much control they want.
+
+HotBot's existing MCP server supports a custom connector in the Muse app. This hackathon adds Muse Spark 1.3 directly inside HotBot's portfolio interface through Meta Model API. The two entry points bring conversation to the same product; the recorded native conversation reads a paper portfolio and prepares a proposal for review.
 
 ## Workflow
 
-1. **Investigate a decision.** Ask whether recent activity matches the portfolio’s original instructions.
+1. **Ask Muse in plain English.** Ask what the trading team did, why it acted, or how to give you more control.
 2. **Inspect the evidence.** Expand a source to see its tool, exact field, returned value, and read time.
-3. **Review one change.** Compare the current and proposed setting, its reason, and its tradeoff. Nothing is applied from this chat.
+3. **Turn a preference into a proposal.** Compare the current and proposed setting, its reason, and its tradeoff. Nothing is applied from this chat.
 
 The recorded walkthrough asks why HotBot passed on ELEVEN, then bought it about five minutes later. It compares both journal records and requests a change requiring approval before ordinary trades. This is a real account’s paper history; another account will contain different records.
 
@@ -32,7 +36,7 @@ You need **Node.js 22+**, **Bun**, a **Meta Model API key** with access to `muse
 
 In HotBot’s Account page, open **Your agents → New key** and leave **Can trade** off. Copy the one-time key locally.
 
-**Terminal 1 — from the repository root:**
+**Terminal 1, from the repository root:**
 
 ```sh
 cp muse-agent/.env.example muse-agent/.env
@@ -41,7 +45,7 @@ cd muse-agent
 node --env-file=.env server.mjs
 ```
 
-**Terminal 2 — from the repository root:**
+**Terminal 2, from the repository root:**
 
 ```sh
 bun install --frozen-lockfile --ignore-scripts

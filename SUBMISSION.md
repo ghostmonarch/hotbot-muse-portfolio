@@ -5,7 +5,7 @@
 **Problem statement:** Build for Your World
 
 **Public repository:** https://github.com/ghostmonarch/hotbot-muse-portfolio
-**Three-minute demo video:** Final narrated video link pending.
+**Demo video (under three minutes):** [Watch the submitted walkthrough](https://youtu.be/N2t3SKpPfgo).
 
 The four sections below are the reviewed submission field text.
 

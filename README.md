@@ -2,23 +2,29 @@
 
 <h1 align="center">HotBot × Muse</h1>
 
-<p align="center">Bring HotBot’s trading intelligence into a conversation with Muse. Explore a paper portfolio and review changes in everyday language.</p>
+<p align="center">HotBot brings the trading intelligence. Muse makes it as easy as a conversation.</p>
 
 <p align="center"><a href="https://youtu.be/N2t3SKpPfgo">Watch the demo</a> · <a href="SUBMISSION.md">Submission & rubric</a> · <a href="#workflow">Workflow</a> · <a href="#quickstart">Quickstart</a> · <a href="#verification">Verification</a> · <a href="#scope">Scope</a> · <a href="#license">MIT License</a></p>
 
-Our vision is intelligent agentic trading as easy as talking to Muse. HotBot supplies the trading team, portfolio tools and controls; Muse lets a person ask what happened, understand the records and express how much control they want.
+We're building HotBot for people who want an AI trading team they can actually understand and guide. Ask what it bought. Ask why. Tell it when you want to be asked first.
 
-HotBot's existing MCP server supports a custom connector in the Muse app. This hackathon adds Muse Spark 1.3 directly inside HotBot's portfolio interface through Meta Model API. The two entry points bring conversation to the same product; the recorded native conversation reads a paper portfolio and prepares a proposal for review.
+That's where Muse comes in. It reads the portfolio, explains what happened and shows you a proposed change before you decide what to do. You can open the records behind its answer.
+
+This demo uses a paper portfolio. Muse can read and propose changes here; it doesn't place trades or change settings. Our goal is simple: make using HotBot as easy as talking to Muse.
 
 ## Workflow
 
-1. **Ask Muse in plain English.** Ask what the trading team did, why it acted, or how to give you more control.
-2. **Inspect the evidence.** Expand a source to see its tool, exact field, returned value, and read time.
-3. **Turn a preference into a proposal.** Compare the current and proposed setting, its reason, and its tradeoff. Nothing is applied from this chat.
+1. **Ask what you care about.** "Why did it buy that coin?" "Can you ask me before the next buy?"
+2. **See the records.** Open the journal entry behind an answer and check what the trading team recorded.
+3. **Decide what to change.** Review the current setting, the proposed change and what else it affects. Nothing changes from this chat.
 
 The recorded walkthrough asks why HotBot passed on ELEVEN, then bought it about five minutes later. It compares both journal records and requests a change requiring approval before ordinary trades. This is a real account’s paper history; another account will contain different records.
 
-The new interface runs locally. Its balances and results are simulated. It is not a claim that the Muse interface has been deployed to the existing HotBot service. The video is a separate artifact, not bundled here.
+The walkthrough runs in a local hackathon build with real Meta responses and HotBot paper-portfolio records. The public repository contains the client and new Muse layer; the existing HotBot backend remains an external dependency.
+
+## How Muse connects
+
+HotBot's existing MCP server supports a custom connector in the Muse app. For this hackathon, we also put Muse Spark 1.3 inside HotBot's portfolio screen through Meta Model API. The video shows that new conversation inside HotBot.
 
 ```mermaid
 flowchart LR

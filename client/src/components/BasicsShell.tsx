@@ -10,12 +10,13 @@ import { LoaderCircle, RotateCcw } from 'lucide-react';
 import type { AccountRuntimeProps } from '@/components/account/AccountRuntime';
 import { ConvexProvider } from 'convex/react';
 import { convex, ConvexQueryCacheProvider } from '@/lib/convex';
+import { isMcpPreviewPath, McpPreviewProvider } from '@/components/team/McpPreviewProvider';
 
 // The sidebar, team panel and composer, with every page they open: the launch page and /join never load them.
 const ConditionalNavigation = dynamic(() => import('@/components/ConditionalNavigation').then(module => module.ConditionalNavigation));
 
 // Start downloading account services (Convex Auth) as soon as this module runs, not after the first render; the bare pages never use them.
-let runtimeRequest: Promise<typeof import('@/components/account/AccountRuntime')> | null = typeof window === 'undefined' || isBarePath(window.location.pathname) ? null : import('@/components/account/AccountRuntime');
+let runtimeRequest: Promise<typeof import('@/components/account/AccountRuntime')> | null = typeof window === 'undefined' || isBarePath(window.location.pathname) || isMcpPreviewPath(window.location.pathname) ? null : import('@/components/account/AccountRuntime');
 const loadRuntime = () => (runtimeRequest ??= import('@/components/account/AccountRuntime'));
 
 function WorkspaceShell({ children }: PropsWithChildren) {
@@ -64,6 +65,7 @@ function SignedInJoin({ children }: PropsWithChildren) {
 
 export function BasicsShell({ children }: PropsWithChildren) {
   const pathname=usePathname();
+  if (isMcpPreviewPath(pathname)) return <McpPreviewProvider><ConditionalNavigation accountControls={<div className="flex flex-col gap-2 px-2 text-xs text-muted-foreground"><span>Local MCP preview · read only</span><AppearancePicker iconOnly/></div>}>{children}</ConditionalNavigation></McpPreviewProvider>;
   // The launch page and the application have their own header and document scroll, without workspace services.
   const shell = isJoinPath(pathname) ? <SignedInJoin>{children}</SignedInJoin> : isBarePath(pathname) ? <>{children}</> : <WorkspaceShell>{children}</WorkspaceShell>;
   // One query cache for the whole app, shared by every screen's cached `useQuery`.

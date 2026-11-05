@@ -4,7 +4,7 @@
 
 <p align="center">HotBot brings the trading intelligence. Muse makes it as easy as a conversation.</p>
 
-<p align="center"><a href="https://youtu.be/N2t3SKpPfgo">Watch the demo</a> · <a href="SUBMISSION.md">Submission & rubric</a> · <a href="#workflow">Workflow</a> · <a href="#quickstart">Quickstart</a> · <a href="#verification">Verification</a> · <a href="#scope">Scope</a> · <a href="#license">MIT License</a></p>
+<p align="center"><a href="https://youtu.be/RcT1DuSwffI">Watch the demo</a> · <a href="SUBMISSION.md">Submission & rubric</a> · <a href="#workflow">Workflow</a> · <a href="#quickstart">Quickstart</a> · <a href="#verification">Verification</a> · <a href="#scope">Scope</a> · <a href="#license">MIT License</a></p>
 
 We're building HotBot for people who want an AI trading team they can actually understand and guide. Ask what it bought. Ask why. Tell it when you want to be asked first.
 
@@ -18,7 +18,7 @@ This demo uses a paper portfolio. Muse can read and propose changes here; it doe
 2. **See the records.** Open the journal entry behind an answer and check what the trading team recorded.
 3. **Decide what to change.** Review the current setting, the proposed change and what else it affects. Nothing changes from this chat.
 
-The recorded walkthrough asks why HotBot passed on ELEVEN, then bought it about five minutes later. It compares both journal records and requests a change requiring approval before ordinary trades. This is a real account’s paper history; another account will contain different records.
+The walkthrough opens with HotBot's existing portfolio setup, then shows the new Muse conversation. The user asks why HotBot passed on ELEVEN, then bought it about five minutes later. Muse compares both journal records and prepares a proposal requiring approval before ordinary trades. This is a real account’s paper history; another account will contain different records.
 
 The walkthrough runs in a local hackathon build with real Meta responses and HotBot paper-portfolio records. The public repository contains the client and new Muse layer; the existing HotBot backend remains an external dependency.
 

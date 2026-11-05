@@ -1,12 +1,11 @@
 # Muse portfolio conversation
 
-Ask Muse about one HOTBOT portfolio in everyday language. Muse Spark reads the
-portfolio and its records, explains the trading team's activity and turns a
-request for more control into a setting proposal. The interface shows actual
-tool activity and expandable source records. A proposal stays unapplied; the
-person reviews it and makes any change in HOTBOT.
+Ask Muse what HotBot bought, why it acted, or how to give you more control.
+Muse reads the portfolio, explains the recorded decisions and shows you a
+proposed change before you decide what to do. Open a source to see the record
+behind an answer. The proposal stays unapplied.
 
-Our vision is intelligent agentic trading as easy as talking to Muse. HotBot's
+We want using HotBot to feel as easy as talking to Muse. HotBot's
 existing MCP server also supports a custom connector in the Muse app. This new
 module brings Muse Spark into HotBot through Meta Model API; the recorded
 native conversation uses paper activity and has no trading or setting-write tools.

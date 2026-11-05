@@ -1,0 +1,18 @@
+HOTBOT × MUSE — native product walkthrough
+
+Use the existing 1:43 native HotBot recording. Record the accepted narration in video-voiceover.txt naturally, leaving pauses for source and proposal expansion. The recording contains real Meta/MCP responses and paper activity. Model waits are shortened; the narration identifies that edit.
+
+Approximate sequence:
+0:00–0:06 Portfolio overview.
+0:06–0:16 Open Chat and ask about the ELEVEN journal records.
+0:16–0:28 Muse explains the recorded decisions.
+0:28–0:36 Expand the real tool activity.
+0:36–0:50 Open the original source record.
+0:50–1:00 Ask to require approval before the next buy.
+1:00–1:17 Show the specific setting proposal and its wider effects.
+1:17–1:31 Open the source for the current setting.
+1:31–1:43 End with the proposal awaiting review.
+
+Show the actual existing interface and the new Muse conversation. Identify the pre-existing agents/portfolios separately from the new model/tool bridge, source records, checks, and native chat integration. The film shows Muse Spark inside HotBot; it does not depict a trade executed inside the consumer Muse app.
+
+No account settings or trading actions are executed from this conversation. Record missing data or errors honestly; do not replace responses with staged text. Keep credentials out of the recording and repository.

@@ -1,0 +1,15 @@
+HotBot connects an AI trading team to Muse, so using that intelligence can start with an ordinary conversation.
+
+HotBot already had trading agents and paper portfolios. For this hackathon, we brought Muse Spark into the portfolio screen and connected it to our real tools.
+
+Here, I’m asking why it bought a coin. Muse reads the portfolio journal, explains the recorded decisions, and shows the sources behind its answer. I can open the original record, see the exact field, and check when it was read.
+
+Then I say: ask me before the next buy.
+
+Muse turns that preference into a concrete setting proposal: the setting now, what would change, and the tradeoff. It explains that ordinary sells would need approval too, while safety-floor exits continue.
+
+The proposal waits for my review. I get a useful next step and the evidence to judge it.
+
+That’s our vision: HotBot provides the trading intelligence and controls; Muse makes them accessible through conversation. Agentic trading that feels as easy as talking to Muse.
+
+This demonstration uses real paper-portfolio data and Meta responses. Model waits are shortened.

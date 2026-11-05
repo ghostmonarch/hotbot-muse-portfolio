@@ -20,6 +20,7 @@ import { TeamPanel, useTeamLayout } from './TeamPanel';
 import { coinLookAtom, launchingAtom, pendingPlanAtom, viewedAtom } from './state';
 import s from './team.module.css';
 import { useShellPathname } from '@/lib/appNavigation';
+import { useMcpPreview } from './McpPreviewProvider';
 
 /** The coin dialog loads once a coin is open, not with every page. */
 const CoinLook = dynamic(() => import('./CoinLook').then(module => module.CoinLook), { ssr: false });
@@ -40,26 +41,30 @@ export function focusFor(pathname: string): Focus | null {
 /** The team panel on the right and HOTBOT's composer in the corner, rendered once around every page 
  *  Phones have no panel (MobileNav's header line shows what the team is doing) and open the composer from the bottom bar's Ask button. */
 /** `full`: the page takes the whole window (the Lab), so the team panel steps aside; the composer stays. */
-export function TeamChromeView({ data, focus, full, children }: { data: HomeData | null; focus: Focus | null; full?: boolean; children: ReactNode }) {
+export function TeamChromeView({ data, focus, full, children, readOnly }: { data: HomeData | null; focus: Focus | null; full?: boolean; children: ReactNode; readOnly?: boolean }) {
   const mobile = useIsMobile(), viewing = Boolean(useAtomValue(viewedAtom)), looking = Boolean(useAtomValue(coinLookAtom)), layout = useTeamLayout();
   return <SidebarProvider className="h-full min-h-0 flex-1 overflow-hidden" style={{ '--sidebar-width': layout === 'rail' ? '4.75rem' : 'clamp(18rem, 20vw, 19.5rem)', minHeight: 0 } as CSSProperties}>
     {/* An admin viewing someone's team gets the viewing bar above every page; the frame is layout-neutral otherwise, so pages never remount. */}
     <div className={s.viewingFrame} data-viewing={viewing || undefined}>{children}</div>
     {data && focus && <>
-      {!mobile && !full && <TeamPanel data={data} strategyId={focus.page === 'strategy' ? focus.strategyId : undefined} layout={layout}/>}
+      {!mobile && !full && <TeamPanel data={data} strategyId={focus.page === 'strategy' ? focus.strategyId : undefined} layout={layout} readOnly={readOnly}/>}
       {/* HOTBOT works for the admin's own team, so its composer steps aside while viewing someone else's. */}
-      {!viewing && <Dock data={data} focus={focus}/>}
-      <CheckCoin data={data}/>
-      {looking && <CoinLook/>}
-      <Reporter data={data} focus={focus}/>
-      <AlertToast data={data}/>
-      <AccessGate data={data}/>
-      <TradeToast data={data}/>
+      {!readOnly && <>
+        {!viewing && <Dock data={data} focus={focus}/>}
+        <CheckCoin data={data}/>
+        {looking && <CoinLook/>}
+        <Reporter data={data} focus={focus}/>
+        <AlertToast data={data}/>
+        <AccessGate data={data}/>
+        <TradeToast data={data}/>
+      </>}
     </>}
   </SidebarProvider>;
 }
 
 export function TeamChrome({ children }: { children: ReactNode }) {
+  const preview = useMcpPreview();
+  if (preview) return <TeamChromeView data={preview.team} focus={{ page: 'home' }} readOnly>{children}</TeamChromeView>;
   if (!convex) return <>{children}</>;
   return <ConvexProvider client={convex}><Live>{children}</Live></ConvexProvider>;
 }

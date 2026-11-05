@@ -8,6 +8,7 @@ import { currentUserIdAtom } from '@/store/user/atoms';
 import { WORKER_ONLINE_MS, composeHome, homeAddresses } from '../../../../types/home';
 import type { HomeData } from './data';
 import { viewAsAtom } from './state';
+import { useMcpPreview } from './McpPreviewProvider';
 
 type TeamView = FunctionReturnType<typeof api.team.gateway.view>;
 
@@ -108,7 +109,9 @@ const subscription = atom(get => {
 const home = atom(get => get(get(subscription)));
 
 export function useHome(enabled = true) {
-  const result = useAtomValue(enabled ? home : empty);
+  const preview = useMcpPreview();
+  const result = useAtomValue(enabled && !preview ? home : empty);
+  if (preview) return preview.loading ? undefined : preview.team;
   if (result instanceof Error) throw result;
   return result;
 }

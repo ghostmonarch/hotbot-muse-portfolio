@@ -20,6 +20,7 @@ import { AtLimit, usePortfolioCount, usePortfolioLimit, useStrategyCount, useStr
 import { viewAsAtom } from './state';
 import s from './team.module.css';
 import { Link, useCurrentPlace, useShellPathname } from '@/lib/appNavigation';
+import { useMcpPreview } from './McpPreviewProvider';
 
 const pages = [['/app', 'Home', House], ['/app/portfolios', 'Portfolios', PieChart], ['/app/strategies', 'Strategies', Route]] as const;
 /** The Lab, for admins and the people an admin gave it. */
@@ -29,20 +30,20 @@ export const dev = process.env.NODE_ENV === 'development' ? [['/dev', 'Dev', Wre
 
 /** Navigation, then your portfolios and strategies like a chat list, then the team wallet and one account row pinned under them. */
 export function TeamSidebar({ accountControls }: { accountControls?: ReactNode }) {
-  const pathname = useShellPathname(), { setOpenMobile } = useSidebar(), signedOut = useSignedOut(), hasLab = useAtomValue(labAtom), report = useReport();
+  const pathname = useShellPathname(), { setOpenMobile } = useSidebar(), sessionSignedOut = useSignedOut(), preview = useMcpPreview(), signedOut = !preview && sessionSignedOut, hasLab = useAtomValue(labAtom), report = useReport();
   const lab = useRef<HTMLAnchorElement>(null);
   const active = (href: string) => href === '/app' ? pathname === '/app' : href === '/app/strategies' ? pathname === '/app/strategies' || pathname === '/app/new' : href === '/app/portfolios' ? pathname === '/app/portfolios' || pathname === '/app/portfolios/new' : pathname.startsWith(href);
   return <Sidebar collapsible="icon" variant="floating">
-    <SidebarHeader className="px-4 pt-4 pb-3 group-data-[collapsible=icon]:px-2"><div className="flex items-center justify-between gap-2 group-data-[collapsible=icon]:flex-col"><Link href="/app" aria-label="HOTBOT home" className="flex items-center gap-2.5" onClick={() => setOpenMobile(false)}><AppFlame size={30}/><span className="text-[0.875rem] font-semibold tracking-[0.14em] group-data-[collapsible=icon]:hidden">HOTBOT</span></Link>{!signedOut && <SidebarTrigger aria-label="Minimize or expand navigation"/>}</div></SidebarHeader>
+    <SidebarHeader className="px-4 pt-4 pb-3 group-data-[collapsible=icon]:px-2"><div className="flex items-center justify-between gap-2 group-data-[collapsible=icon]:flex-col"><Link href={preview ? '/muse-preview' : '/app'} aria-label="HOTBOT home" className="flex items-center gap-2.5" onClick={() => setOpenMobile(false)}><AppFlame size={30}/><span className="text-[0.875rem] font-semibold tracking-[0.14em] group-data-[collapsible=icon]:hidden">HOTBOT</span></Link>{!signedOut && <SidebarTrigger aria-label="Minimize or expand navigation"/>}</div></SidebarHeader>
     <SidebarContent className="gap-6">
       {!signedOut && <SidebarGroup className="py-0"><SidebarGroupContent><SidebarMenu className="gap-1">
-        {[...pages, ...(hasLab ? labLink : []), ...dev].map(([href, label, Icon]) => <SidebarMenuItem key={href}><SidebarMenuButton asChild tooltip={label} isActive={active(href)} className={s.navBtn}><Link ref={href === '/app/lab' ? lab : undefined} href={href} onClick={() => setOpenMobile(false)}><Icon/><span>{label}</span>{href === '/app/portfolios' && <span className={`${s.navNew} group-data-[collapsible=icon]:hidden`}>New</span>}</Link></SidebarMenuButton></SidebarMenuItem>)}
-        <SidebarMenuItem><SidebarMenuButton tooltip="Report a problem (F)" className={s.navBtn} aria-keyshortcuts="F" onClick={() => { setOpenMobile(false); report.pick(); }}><Flag className={s.reportFlag}/><span>Report a problem</span></SidebarMenuButton></SidebarMenuItem>
+        {[...pages, ...(hasLab ? labLink : []), ...dev].map(([href, label, Icon]) => <SidebarMenuItem key={href}><SidebarMenuButton asChild tooltip={label} isActive={preview ? href === '/app/portfolios' : active(href)} className={s.navBtn}><Link ref={href === '/app/lab' ? lab : undefined} href={href} aria-disabled={Boolean(preview)} onClick={event => { if (preview) event.preventDefault(); setOpenMobile(false); }}><Icon/><span>{label}</span>{href === '/app/portfolios' && <span className={`${s.navNew} group-data-[collapsible=icon]:hidden`}>New</span>}</Link></SidebarMenuButton></SidebarMenuItem>)}
+        <SidebarMenuItem><SidebarMenuButton tooltip="Report a problem (F)" disabled={Boolean(preview)} className={s.navBtn} aria-keyshortcuts="F" onClick={() => { setOpenMobile(false); report.pick(); }}><Flag className={s.reportFlag}/><span>Report a problem</span></SidebarMenuButton></SidebarMenuItem>
       </SidebarMenu></SidebarGroupContent></SidebarGroup>}
       {!signedOut && <FirstTip id="lab" anchor={lab} when={hasLab && /^\/app\/strategies\/[^/]+$/.test(pathname)} side="right" title="Test changes in the Lab" text="It backtests any change to a strategy, and AI suggests improvements right on screen."/>}
-      {convex && <ConvexProvider client={convex}><SidebarStrategies pathname={pathname} onNavigate={() => setOpenMobile(false)}/></ConvexProvider>}
+      {preview ? <PreviewSidebarStrategies onNavigate={() => setOpenMobile(false)}/> : convex && <ConvexProvider client={convex}><SidebarStrategies pathname={pathname} onNavigate={() => setOpenMobile(false)}/></ConvexProvider>}
     </SidebarContent>
-    <SidebarFooter className="gap-2 p-2 pb-3 group-data-[collapsible=icon]:px-2">{convex && <ConvexProvider client={convex}><SidebarBalance/></ConvexProvider>}<div className="w-full">{accountControls}</div></SidebarFooter>
+    <SidebarFooter className="gap-2 p-2 pb-3 group-data-[collapsible=icon]:px-2">{preview ? <PreviewSidebarBalance/> : convex && <ConvexProvider client={convex}><SidebarBalance/></ConvexProvider>}<div className="w-full">{accountControls}</div></SidebarFooter>
     {!signedOut && <SidebarRail/>}
   </Sidebar>;
 }
@@ -93,15 +94,49 @@ type StrategyPlace = Place & { data: HomeData };
 
 /** One row of the sidebar's lists: the name on top, then its state beside its profit. `dot` colours the state's dot; `real` marks a Real SOL
  *  strategy with the ember wallet; `quiet` greys a paused one; `action` is a button that shows over the row's end while the pointer is on it. */
-function SideRow({ href, active, name, line, dot, real, quiet, pnl, onNavigate, action }: { href: string; active: boolean; name: string; line: string; dot?: 'live' | 'ember' | 'warn'; real?: boolean; quiet?: boolean; pnl: number; onNavigate: () => void; action?: ReactNode }) {
+function SideRow({ href, active, name, line, dot, real, quiet, pnl, onNavigate, action, readOnly }: { href: string; active: boolean; name: string; line: string; dot?: 'live' | 'ember' | 'warn'; real?: boolean; quiet?: boolean; pnl: number; onNavigate: () => void; action?: ReactNode; readOnly?: boolean }) {
   return <SidebarMenuItem className={action ? s.sideItem : undefined}>
-    <SidebarMenuButton asChild isActive={active} className={s.sideRow} data-quiet={quiet || undefined}><Link href={href} onClick={onNavigate} title={name}>
+    <SidebarMenuButton asChild isActive={active} className={s.sideRow} data-quiet={quiet || undefined}><Link href={href} aria-disabled={readOnly || undefined} onClick={event => { if (readOnly) event.preventDefault(); else onNavigate(); }} title={readOnly ? `${name} · controls available in HOTBOT` : name}>
       <b>{name}</b>
       <small data-tone={dot}><span>{line}</span>{real && <Wallet className={s.sideReal} aria-label="Trades Real SOL"><title>Trades Real SOL</title></Wallet>}</small>
       <span className={s.stratPnl} style={{ color: pnlColor(pnl) }}>{signedSol(pnl).replace(' SOL', '')}</span>
     </Link></SidebarMenuButton>
     {action}
   </SidebarMenuItem>;
+}
+
+/** The same native lists, supplied by authenticated MCP reads; no Convex identity is implied. */
+function PreviewSidebarStrategies({ onNavigate }: { onNavigate: () => void }) {
+  const preview = useMcpPreview();
+  if (!preview?.team) return <p className="px-4 text-xs text-muted-foreground" role="status">{preview?.loading ? 'Reading HOTBOT…' : preview?.error ?? 'Connect HOTBOT to read your team.'}</p>;
+  const rows = [...preview.team.strategies].sort((a, b) => strategyRank(a) - strategyRank(b));
+  return <>
+    {preview.portfolios.length > 0 && <SidebarGroup className="py-0 group-data-[collapsible=icon]:hidden">
+      <SidebarGroupLabel className={s.navLabel}>Portfolios<NavCount count={{ kept: preview.portfolios.length, limit: null }}/></SidebarGroupLabel>
+      <SidebarGroupContent><SidebarMenu className="gap-0.5">{preview.portfolios.map(row => {
+        const holding = row.coins.filter(coin => coin.exitedAt === undefined).length;
+        return <SideRow key={row.id} href={`/muse-preview?portfolioId=${encodeURIComponent(row.id)}`} active={false} name={row.name} pnl={row.valueSol - row.startSol} onNavigate={onNavigate}
+          line={row.asks ? 'Needs you' : row.status !== 'running' ? PORTFOLIO_STATUS[row.status] : holding ? `${holding} holding` : 'No coins'}
+          dot={row.asks ? 'warn' : row.status === 'running' || row.status === 'picking' ? 'live' : undefined}/>;
+      })}</SidebarMenu></SidebarGroupContent>
+    </SidebarGroup>}
+    <SidebarGroup className="py-0 group-data-[collapsible=icon]:hidden">
+      <SidebarGroupLabel className={s.navLabel}>Strategies<NavCount count={{ kept: rows.length, limit: null }}/></SidebarGroupLabel>
+      <SidebarGroupContent><SidebarMenu className="gap-0.5">{rows.map(row => <SideRow key={row.id} href={'/app/strategies/' + row.id} active={false} name={row.name}
+        line={strategyLine(row)} dot={row.loss?.stoppedAt != null ? 'warn' : row.status === 'running' ? 'live' : row.status === 'archiving' ? 'ember' : undefined}
+        real={row.mode === 'live'} quiet={row.status === 'paused'} pnl={row.realizedPnlSol + row.openPnlSol} onNavigate={onNavigate} readOnly/>)}</SidebarMenu></SidebarGroupContent>
+    </SidebarGroup>
+  </>;
+}
+
+function PreviewSidebarBalance() {
+  const data = useMcpPreview()?.team;
+  if (!data) return null;
+  const total = data.money.openPnl + data.money.realizedPnlSol;
+  return <button type="button" disabled className={`${s.navBalance} group-data-[collapsible=icon]:!mx-auto group-data-[collapsible=icon]:!p-0 group-data-[collapsible=icon]:!bg-transparent`} aria-label="Team balance, read only" title="Wallet controls are available in HOTBOT">
+    <TokenAvatar className="size-8 rounded-full" address={SOL_MINT} symbol="SOL"/>
+    <span className={`${s.navBalanceText} group-data-[collapsible=icon]:!hidden`}><span><b>{data.money.equity.toFixed(2)} SOL</b><span className={`${s.stratPnl} ${s[tone(total, 2) ?? 'muted']}`}>{signedSol(total, 2).replace(' SOL', '')}</span></span><small>{usd(data.money.equity * data.money.solUsd)} · {data.workspace.mode === 'paper' ? 'Paper' : 'Real SOL'}</small></span>
+  </button>;
 }
 
 /** One strategy's row, with its profit in the portfolio it trades in and its menu. */

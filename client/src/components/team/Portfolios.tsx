@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { atom, useAtom, useAtomValue } from 'jotai';
-import { useAction, useMutation } from 'convex/react';
+import { useAction, useMutation, type PaginationStatus } from 'convex/react';
 import type { FunctionReturnType } from 'convex/server';
 import { toast } from 'sonner';
 import { Archive, ArrowLeft, ArrowUp, BadgeCheck, Bot, Cat, Check, ChevronRight, Eye, Gem, Heart, MessageCircle, Pause, Play, Plus, Repeat2, ShieldCheck, SlidersHorizontal, X } from 'lucide-react';
@@ -20,7 +20,8 @@ import { MicButton } from './MicButton';
 import { useCoinLaunchedAt } from './TokenInfo';
 import { PortfolioChat, type ChatMessage } from './PortfolioChat';
 import { RateButton, useCoinRating } from './Rating';
-import { AUTONOMY, COVER_COINS, FLOOR, JOURNAL_PAGE, MANDATE, pctFrom, profit, signalsOf, type Autonomy, type Mandate } from '../../../../types/portfolio';
+import { AUTONOMY, COVER_COINS, FLOOR, JOURNAL_PAGE, MANDATE, pctFrom, signalsOf, type Autonomy, type Mandate } from '../../../../types/portfolio';
+import type { MusePortfolioData, MusePortfolioCoin } from '@/lib/musePortfolio';
 import type { LIMIT_KEYS } from '../../../../types/portfolioChat';
 import { planMeters, planText, type PlanMeter, type RiskKind } from '../../../../types/plan';
 import type { AgentRole } from '../../../../types/hotbot';
@@ -39,7 +40,8 @@ export type PageData = NonNullable<FunctionReturnType<typeof api.portfolios.page
 type Findings = NonNullable<FunctionReturnType<typeof api.portfolios.findings>>;
 type Claim = Findings['coins'][number]['claims'][number];
 type Entry = PageData['journal'][number];
-type CoinRow = PageData['coins'][number];
+type ViewData = PageData | MusePortfolioData;
+type CoinRow = PageData['coins'][number] | MusePortfolioCoin;
 type Draft = FunctionReturnType<typeof api.portfolios.draft>;
 
 /** Words an idea card hands to the new-portfolio screen. */
@@ -111,13 +113,13 @@ function InSol({ nextPickAt, now }: { nextPickAt: number | null; now: number }) 
 }
 
 type LineTrade = { id: string; at: number; tone?: string; line: string; sol?: number; pnlSol?: number };
-type LinePoint = { at: number; value: number; hold: number };
+type LinePoint = { at: number; value: number; hold?: number };
 /** The line at `at`, straight between the points around it, as it is drawn. */
 const along = (points: readonly LinePoint[], at: number): LinePoint => {
   const after = points.findIndex(point => point.at >= at);
   if (after <= 0) return { ...points[after === 0 ? 0 : points.length - 1], at };
   const a = points[after - 1], b = points[after], share = (at - a.at) / Math.max(1, b.at - a.at);
-  return { at, value: a.value + (b.value - a.value) * share, hold: a.hold + (b.hold - a.hold) * share };
+  return { at, value: a.value + (b.value - a.value) * share, hold: a.hold !== undefined && b.hold !== undefined ? a.hold + (b.hold - a.hold) * share : undefined };
 };
 const TIP_TRADES = { near: 0.015, max: 3 } as const;
 /** The value line and, dashed, the same picks bought once and never touched. A pointer over it reads the line where it points: the time,
@@ -129,11 +131,11 @@ function ValueLine({ points, start, trades = [] }: { points: LinePoint[]; start:
   const line = useMemo(() => {
     if (points.length < 2) return null;
     const first = points[0].at, span = Math.max(1, points.at(-1)!.at - first);
-    const values = points.flatMap(point => [point.value, point.hold, start]), low = Math.min(...values), high = Math.max(...values), pad = Math.max(start * 0.01, (high - low) * 0.15);
+    const values = points.flatMap(point => point.hold === undefined ? [point.value, start] : [point.value, point.hold, start]), low = Math.min(...values), high = Math.max(...values), pad = Math.max(start * 0.01, (high - low) * 0.15);
     const y = (value: number) => 4 + (1 - (value - (low - pad)) / (high - low + 2 * pad)) * 34;
-    const path = (key: 'value' | 'hold') => points.map((point, index) => `${index ? 'L' : 'M'}${((point.at - first) / span * 100).toFixed(2)} ${y(point[key]).toFixed(2)}`).join(' ');
+    const path = (key: 'value' | 'hold') => points.map((point, index) => `${index ? 'L' : 'M'}${((point.at - first) / span * 100).toFixed(2)} ${y(point[key] ?? point.value).toFixed(2)}`).join(' ');
     const dots = trades.filter(trade => trade.at >= first && trade.at <= first + span).map(trade => ({ ...trade, left: (trade.at - first) / span * 100, top: y(along(points, trade.at).value) / 40 * 100 }));
-    return { first, span, y, value: path('value'), hold: path('hold'), base: y(start), dots };
+    return { first, span, y, value: path('value'), hold: points.every(point => point.hold !== undefined) ? path('hold') : null, base: y(start), dots };
   }, [points, start, trades]);
   const change = changeTone((points.at(-1)?.value ?? start) - start, start), shade = change === 'down' ? 'var(--destructive)' : change === 'up' ? 'var(--positive)' : 'var(--muted-foreground)';
   if (!line) return <div className={s.folioChartEmpty} role="img" aria-label="The value line starts once HOTBOT has picked and priced the coins"><BotAvatar role="coordinator" size={44} mood="scan"/></div>;
@@ -144,11 +146,11 @@ function ValueLine({ points, start, trades = [] }: { points: LinePoint[]; start:
   };
   const left = point ? (point.at - line.first) / line.span * 100 : 0;
   const here = pointed === null ? [] : trades.filter(trade => Math.abs(trade.at - pointed) <= line.span * TIP_TRADES.near).sort((a, b) => Math.abs(a.at - pointed) - Math.abs(b.at - pointed));
-  return <div className={s.folioChartWrap} onPointerMove={read} onPointerDown={read} onPointerLeave={() => setPointed(null)}><svg className={s.folioChart} viewBox="0 0 100 40" preserveAspectRatio="none" role="img" aria-label="Portfolio value over time, against buy-and-hold">
+  return <div className={s.folioChartWrap} onPointerMove={read} onPointerDown={read} onPointerLeave={() => setPointed(null)}><svg className={s.folioChart} viewBox="0 0 100 40" preserveAspectRatio="none" role="img" aria-label={line.hold ? "Portfolio value over time, against buy-and-hold" : "Paper portfolio value over time"}>
     <defs><linearGradient id={gradient} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={shade} stopOpacity={0.2}/><stop offset="100%" stopColor={shade} stopOpacity={0}/></linearGradient></defs>
     <path d={`M0 ${line.base.toFixed(2)} L100 ${line.base.toFixed(2)}`} stroke="var(--border)" strokeWidth={1} vectorEffect="non-scaling-stroke"/>
     <path d={`${line.value} L100 40 L0 40 Z`} fill={`url(#${gradient})`}/>
-    <path d={line.hold} fill="none" stroke="var(--muted-foreground)" strokeOpacity={0.7} strokeWidth={1.25} strokeDasharray="3 3" vectorEffect="non-scaling-stroke"/>
+    {line.hold && <path d={line.hold} fill="none" stroke="var(--muted-foreground)" strokeOpacity={0.7} strokeWidth={1.25} strokeDasharray="3 3" vectorEffect="non-scaling-stroke"/>}
     <path d={line.value} fill="none" stroke={shade} strokeWidth={1.75} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke"/>
   </svg>{line.dots.map(dot => <i key={dot.id} className={s.folioDot} data-tone={dot.tone} style={{ left: `${dot.left}%`, top: `${dot.top}%` }} aria-hidden/>)}
     {point && <>
@@ -157,7 +159,7 @@ function ValueLine({ points, start, trades = [] }: { points: LinePoint[]; start:
       <div className={s.folioTip} style={{ left: `${Math.min(80, Math.max(20, left))}%` }} role="status">
         <small>{new Date(point.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</small>
         <b className={s.num}>{sol(point.value, 2)} <span className={s[tone(move, 1) ?? 'muted']}>{pct(move)}</span></b>
-        <small className={s.num}>Holding {sol(point.hold, 2)}</small>
+        {point.hold !== undefined && <small className={s.num}>Holding {sol(point.hold, 2)}</small>}
         {here.slice(0, TIP_TRADES.max).map(trade => <span key={trade.id} className={s.folioTipTrade} data-tone={trade.tone}><i aria-hidden/>{trade.line}{trade.sol != null && <b className={s.num}>{sol(trade.sol, 2)}{trade.pnlSol != null && trade.sol - trade.pnlSol > 0 && <span className={s[tone(trade.pnlSol / (trade.sol - trade.pnlSol) * 100, 1) ?? 'muted']}> {pct(trade.pnlSol / (trade.sol - trade.pnlSol) * 100)}</span>}</b>}</span>)}
         {here.length > TIP_TRADES.max && <small>+{here.length - TIP_TRADES.max} more</small>}
       </div>
@@ -316,7 +318,7 @@ function DraftCard({ draft, busy, onAutonomy, onStart }: { draft: Draft; busy: '
   </div>;
 }
 
-const worthOf = (coin: CoinRow, data: PageData) => coin.position.qty * coin.mark.priceUsd / (data.solUsd || 1);
+const worthOf = (coin: CoinRow, data: ViewData) => coin.position.qty * coin.mark.priceUsd / (data.solUsd || 1);
 
 /** A coin's plan as meters (`planMeters`): each step with how far the coin has moved toward it from where the plan was set, and the code
  *  floor. A step's value is the price's distance from its level, or a risk's progress; a step that fired shows its state. Take profits are
@@ -336,8 +338,8 @@ function wires(coin: CoinRow, now = Date.now()): Wire[] {
 }
 
 /** A held coin as a card: its art, the move, its share and worth, why HOTBOT holds it, and the open plan step it is closest to. */
-function CoinCard({ coin, data, onOpen }: { coin: CoinRow; data: PageData; onOpen: () => void }) {
-  const worth = worthOf(coin, data), gain = profit(coin.position, coin.mark.priceUsd, data.solUsd || 1), gainPct = coin.position.paidSol > 0 ? gain / coin.position.paidSol * 100 : 0;
+function CoinCard({ coin, data, onOpen }: { coin: CoinRow; data: ViewData; onOpen: () => void }) {
+  const worth = worthOf(coin, data), gain = (worthOf(coin, data) + coin.position.realizedSol - coin.position.paidSol), gainPct = coin.position.paidSol > 0 ? gain / coin.position.paidSol * 100 : 0;
   const share = worth / Math.max(1e-9, data.book.value) * 100, hot = wires(coin).filter(wire => !wire.done).reduce<Wire | null>((best, wire) => !best || wire.fill > best.fill ? wire : best, null);
   // A block, not a <button>: Safari draws a button's own border and does not stretch its parts, so the card would not match the banner.
   return <li><div role="button" tabIndex={0} className={`${s.surface} ${s.folioCoin}`} onClick={onOpen} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen(); } }}>
@@ -374,10 +376,10 @@ function Claims({ claims }: { claims: Claim[] }) {
 
 /** One held coin in full, in the coin sheet every coin opens in: its head with the worth and move, its chart with the entry, the market's
  *  pulse, the thesis, its plan step by step, and Rate. */
-function CoinDialog({ coin, data, claims, now, onWhy, onClose }: { coin: CoinRow; data: PageData; claims?: Claim[]; now: number; onWhy?: () => void; onClose: () => void }) {
+function CoinDialog({ coin, data, claims, now, onWhy, onClose }: { coin: CoinRow; data: ViewData; claims?: Claim[]; now: number; onWhy?: () => void; onClose: () => void }) {
   const rating = useCoinRating({ mint: coin.address, symbol: coin.symbol });
-  const worth = worthOf(coin, data), gain = profit(coin.position, coin.mark.priceUsd, data.solUsd || 1), gainPct = coin.position.paidSol > 0 ? gain / coin.position.paidSol * 100 : 0;
-  const drained = pctFrom(coin.position.entryLiquidityUsd, coin.mark.liquidityUsd), markers = useTrailMarkers(coin.id), launchedAt = useCoinLaunchedAt(coin.address);
+  const worth = worthOf(coin, data), gain = (worthOf(coin, data) + coin.position.realizedSol - coin.position.paidSol), gainPct = coin.position.paidSol > 0 ? gain / coin.position.paidSol * 100 : 0;
+  const drained = coin.position.entryLiquidityUsd === undefined ? 0 : pctFrom(coin.position.entryLiquidityUsd, coin.mark.liquidityUsd), markers = useTrailMarkers(coin.id), launchedAt = useCoinLaunchedAt(coin.address);
   return <CoinSheet title={coin.symbol} onClose={onClose} dock={<div className={s.decisionActions}>
     {onWhy && <Button size="sm" variant="secondary" onClick={onWhy}>Why it holds it<ChevronRight/></Button>}
     <RateButton rating={rating} symbol={coin.symbol} tip={false}/>
@@ -446,12 +448,19 @@ const SOLD_PAGE = 20;
 type SoldRow = { id: string; address: string; symbol: string; gainSol: number; exitedAt: number };
 /** The coins it sold, newest first, a page at a time as the reader nears the end. A row opens the move that sold it when the page holds that
  *  move. `sample` stands in for the read on /dev/portfolio. */
-function SoldCoins({ data, sample, onOpen }: { data: PageData; sample?: SoldRow[]; onOpen: (entry: Entry) => void }) {
-  const now = useNow(30_000), pages = usePaginatedQuery(api.portfolios.soldCoins, sample ? 'skip' : { id: data.id, ...useAtomValue(viewAsAtom) }, { initialNumItems: SOLD_PAGE });
-  const rows = sample ?? pages.results;
-  if (!sample && pages.status === 'LoadingFirstPage') return <Loading rows={2}/>;
+type SoldProps = { data: ViewData; sample?: SoldRow[]; onOpen: (entry: Entry) => void };
+function SoldCoins(props: SoldProps) {
+  return props.sample ? <SoldCoinRows data={props.data} rows={props.sample} onOpen={props.onOpen} status="Exhausted"/> : <LiveSoldCoins {...props}/>;
+}
+function LiveSoldCoins({ data, onOpen }: SoldProps) {
+  const pages = usePaginatedQuery(api.portfolios.soldCoins, { id: data.id, ...useAtomValue(viewAsAtom) }, { initialNumItems: SOLD_PAGE });
+  if (pages.status === 'LoadingFirstPage') return <Loading rows={2}/>;
+  return <SoldCoinRows data={data} rows={pages.results} onOpen={onOpen} status={pages.status} onMore={() => pages.loadMore(SOLD_PAGE)}/>;
+}
+function SoldCoinRows({ data, rows, onOpen, status, onMore = () => {} }: Omit<SoldProps, 'sample'> & { rows: SoldRow[]; status: PaginationStatus; onMore?: () => void }) {
+  const now = useNow(30_000);
   if (!rows.length) return null;
-  return <Paged status={sample ? 'Exhausted' : pages.status} onMore={() => pages.loadMore(SOLD_PAGE)}>
+  return <Paged status={status} onMore={onMore}>
     <ul className={`${s.surface} ${s.folioMoves} ${s.folioPanel}`} aria-label="Sold">{rows.map(row => { const entry = data.journal.find(item => item.coinId === row.id); return <li key={row.id}><button type="button" className={s.folioMoveRow} disabled={!entry} onClick={() => entry && onOpen(entry)}>{coinAvatar(row, 'size-9 rounded-full')}<span className={s.folioMoveText}>Sold {row.symbol}</span><span className={s.folioMoveEnd}><b className={`${s.num} ${s[tone(row.gainSol, 2) ?? 'muted']}`}>{signedSol(row.gainSol, 2)}</b><small>{ago(row.exitedAt, now)}</small></span></button></li>; })}</ul>
   </Paged>;
 }
@@ -476,13 +485,13 @@ function Move({ entry, now, onOpen }: { entry: Entry; now: number; onOpen: () =>
 
 /** One journal entry in full: why it woke, what it read, what it decided and the plan it set, and for a coin its chart with every
  *  decision on it, this one lit. A pin opens its own entry when the page holds it. An open ask can be answered here. */
-function EntryDialog({ entry, data, onOpen, onClose }: { entry: Entry; data: PageData; onOpen: (entry: Entry) => void; onClose: () => void }) {
+function EntryDialog({ entry, data, onOpen, onClose }: { entry: Entry; data: ViewData; onOpen: (entry: Entry) => void; onClose: () => void }) {
   const answer = useMutation(api.portfolios.answer), act = useAct(), now = useNow(30_000);
   const coin = data.coins.find(row => row.id === entry.coinId), mark = entry.read?.mark, markers = useTrailMarkers(entry.coinId), chartMark = coin?.mark ?? mark;
   // Fixed once the trail loads, so the window does not move while the dialog is open.
   const range = useMemo(() => markers && trailRange(markers, entry.at, coin?.status === 'held', Date.now()), [markers, entry.at, coin?.status]);
   // The coin as it stands now, for a coin still held: what all its buys cost, its worth and the move against that cost.
-  const held = coin && coin.status === 'held' ? { paid: coin.position.paidSol, worth: worthOf(coin, data), gainPct: coin.position.paidSol > 0 ? profit(coin.position, coin.mark.priceUsd, data.solUsd || 1) / coin.position.paidSol * 100 : 0 } : null;
+  const held = coin && coin.status === 'held' ? { paid: coin.position.paidSol, worth: worthOf(coin, data), gainPct: coin.position.paidSol > 0 ? (worthOf(coin, data) + coin.position.realizedSol - coin.position.paidSol) / coin.position.paidSol * 100 : 0 } : null;
   const reply = async (approve: boolean) => { const done = await act(() => answer({ entryId: entry.id, approve })); if (!done) return; if (done.answer === 'approved') toast.success('Approved: filled on paper'); else toast(done.why ?? 'Skipped'); onClose(); };
   const tiles: [string, ReactNode][] = mark ? [['Price', price(mark.priceUsd)], ['24 h', <span key="d" className={s[tone(mark.change24hPct, 1) ?? 'muted']}>{pct(mark.change24hPct)}</span>], ['Liquidity', usd(mark.liquidityUsd)], ['Market cap', usd(mark.capUsd)], ['Volume, 24 h', usd(mark.volume24hUsd)],
     ...(coin && entry.kind !== 'pick' ? [['From entry', <span key="e" className={s[tone(pctFrom(coin.position.entryPriceUsd, mark.priceUsd), 1) ?? 'muted']}>{pct(pctFrom(coin.position.entryPriceUsd, mark.priceUsd))}</span>] as [string, ReactNode]] : []),
@@ -568,18 +577,27 @@ export function PortfolioPage({ id }: { id: string }) {
 }
 
 /** `chat` stands in for the chat's thread on /dev/portfolio. */
-export function PortfolioView({ data, chat }: { data: PageData; chat?: ChatMessage[] }) {
-  const now = useNow(30_000), act = useAct(), router = useRouter(), setStatus = useMutation(api.portfolios.setStatus);
-
-  const [tab, setTab] = useState('run'), [show, setShow] = useState<Feed>('all');
+type ViewProps = { data: ViewData; chat?: ChatMessage[]; chatContent?: ReactNode; readOnlyPreview?: boolean; initialTab?: string; onReviewSettingsReady?: (open: () => void) => void };
+/** Reuse the shipped portfolio UI with explicit read-only MCP data, without starting Convex account services. */
+export function PortfolioView(props: ViewProps) {
+  return props.readOnlyPreview ? <PortfolioBody {...props}/> : <LivePortfolioView {...props} data={props.data as PageData}/>;
+}
+function LivePortfolioView(props: ViewProps & { data: PageData }) {
+  const setStatus = useMutation(api.portfolios.setStatus), act = useAct();
+  const findings = useQuery(api.portfolios.findings, { id: props.data.id, ...useAtomValue(viewAsAtom) });
+  return <PortfolioBody {...props} findings={findings} onStatus={status => act(() => setStatus({ id: props.data.id, status }))} chatContent={props.chatContent ?? <PortfolioChat data={props.data} sample={props.chat}/>}/>;
+}
+function PortfolioBody({ data, chat, chatContent, readOnlyPreview = false, initialTab = 'run', onReviewSettingsReady, findings, onStatus }: ViewProps & { findings?: Findings | null; onStatus?: (status: 'paused' | 'running' | 'archived') => Promise<unknown> }) {
+  const now = useNow(30_000), router = useRouter();
+  const [tab, setTab] = useState(initialTab), [show, setShow] = useState<Feed>('all');
   const [open, setOpen] = useState<Entry | null>(null), [coinOpen, setCoinOpen] = useState<string | null>(null), [settings, setSettings] = useState(false), [archiving, setArchiving] = useState(false);
   // The team's claims and lessons: read only while the run tab or a coin's dialog shows them.
-  const as = useAtomValue(viewAsAtom), findings = useQuery(api.portfolios.findings, tab === 'run' || coinOpen ? { id: data.id, ...as } : 'skip');
+  useEffect(() => { onReviewSettingsReady?.(() => setSettings(true)); }, [onReviewSettingsReady]);
   const trades = useMemo(() => data.journal.filter(entry => entry.status !== 'pending' && entry.status !== 'skipped' && entryTag(entry).group === 'trade').map(entry => ({ id: entry.id, at: entry.at, tone: entryTag(entry).tone, line: entry.line, sol: entry.sol, pnlSol: entry.pnlSol })), [data.journal]);
   const held = data.coins.filter(coin => coin.status === 'held'), sold = data.coins.filter(coin => coin.status === 'exited');
   // The banner shows the coins held now, else the newest it sold, greyed.
   const faces = held.length ? held : [...sold].sort((a, b) => (b.exitedAt ?? 0) - (a.exitedAt ?? 0)).slice(0, COVER_COINS), past = !held.length && faces.length > 0;
-  const { value: worth, hold } = data.book, pnl = worth - data.startSol, vsHold = worth - hold, started = held.length + sold.length > 0;
+  const { value: worth, hold } = data.book, pnl = worth - data.startSol, vsHold = hold === undefined ? 0 : worth - hold, started = held.length + sold.length > 0;
   const stop = data.mandate.stopAllSol, room = data.startSol > stop ? Math.max(0, Math.min(1, (worth - stop) / (data.startSol - stop))) : 1;
   const asks = data.journal.filter(entry => entry.status === 'pending' && (entry.expiresAt ?? 0) > now), live = data.status === 'running' || data.status === 'picking';
   const cover = faces.find(coin => coin.header)?.header, day = Math.max(1, Math.ceil(((now || data.createdAt) - data.createdAt) / 86_400_000));
@@ -592,9 +610,9 @@ export function PortfolioView({ data, chat }: { data: PageData; chat?: ChatMessa
   // stays, and a picked filter keeps its place. Otherwise a filter that lost its last move falls back to all.
   const more = data.journal.length >= JOURNAL_PAGE, feed = more || counts[show] ? show : 'all', total = more ? `${JOURNAL_PAGE}+` : String(data.journal.length);
   const moves = data.journal.filter(entry => feed === 'all' || entryTag(entry).group === feed), coin = held.find(row => row.id === coinOpen);
-  const archive = async () => { if (await act(() => setStatus({ id: data.id, status: 'archived' })) !== undefined) router.push(appHref('portfolios')); };
+  const archive = async () => { if (await onStatus?.('archived') !== undefined) router.push(appHref('portfolios')); };
   return <div className={`${s.page} ${s.folioPage}`}>
-    <Link href={appHref('portfolios')} className={s.back}><ArrowLeft size={14}/>Portfolios</Link>
+    <Link href={readOnlyPreview ? "/muse-preview" : appHref('portfolios')} className={s.back}><ArrowLeft size={14}/>Portfolios</Link>
     <header className={`${s.surface} ${s.folioBanner}`}>
       <Cover src={cover} coin={faces[0]} past={past}/>
       <div className={s.folioBannerBody}>
@@ -604,8 +622,8 @@ export function PortfolioView({ data, chat }: { data: PageData; chat?: ChatMessa
         <p className={s.folioBannerSub}>{data.mandate.summary}</p>
       </div>
       <div className={s.folioBannerActions}>
-        {live ? <button type="button" className={s.toggleButton} onClick={() => void act(() => setStatus({ id: data.id, status: 'paused' }))}><Pause/>Pause</button>
-          : data.status === 'paused' ? <button type="button" className={s.toggleButton} data-go onClick={() => void act(() => setStatus({ id: data.id, status: 'running' }))}><Play/>Run</button> : null}
+        {live ? <button type="button" className={s.toggleButton} disabled={readOnlyPreview} title={readOnlyPreview ? 'Read-only local preview' : undefined} onClick={() => void onStatus?.('paused')}><Pause/>Pause</button>
+          : data.status === 'paused' ? <button type="button" className={s.toggleButton} data-go disabled={readOnlyPreview} onClick={() => void onStatus?.('running')}><Play/>Run</button> : null}
         <button type="button" className={s.headRound} aria-label="Settings" title="Settings" onClick={() => setSettings(true)}><SlidersHorizontal/></button>
       </div>
     </header>
@@ -615,7 +633,7 @@ export function PortfolioView({ data, chat }: { data: PageData; chat?: ChatMessa
     </button>)}</section>}
     <section className={`${s.surface} ${s.folioHud}`} aria-label="Score">
       <div className={s.folioStat}><small>Worth</small><b className={s.num}>{worth.toFixed(2)}<i>SOL</i></b><Delta pnl={pnl} startSol={data.startSol}/></div>
-      <div className={s.folioStat}><small>vs holding</small><b className={`${s.num} ${s[tone(vsHold, 2) ?? 'muted']}`}>{started ? signedSol(vsHold, 2).replace(' SOL', '') : '—'}<i>SOL</i></b><Tug vsHold={started ? vsHold : 0} startSol={data.startSol}/></div>
+      {hold !== undefined ? <div className={s.folioStat}><small>vs holding</small><b className={`${s.num} ${s[tone(vsHold, 2) ?? 'muted']}`}>{started ? signedSol(vsHold, 2).replace(' SOL', '') : '—'}<i>SOL</i></b><Tug vsHold={started ? vsHold : 0} startSol={data.startSol}/></div> : <div className={s.folioStat}><small>Cash</small><b className={s.num}>{data.cashSol.toFixed(2)}<i>SOL</i></b><span className={s.folioDelta}>Paper balance</span></div>}
       <div className={s.folioStat}><small>Above the floor</small><b className={s.num}>{Math.max(0, worth - stop).toFixed(2)}<i>SOL</i></b>
         <RoomMeter room={room} label={`Room above the ${sol(stop, 2)} stop floor`}/></div>
       <div className={s.folioStat}><small>Trades today</small><b className={s.num}>{data.tradesToday}<i>of {data.mandate.tradesPerDay}</i></b>
@@ -626,13 +644,13 @@ export function PortfolioView({ data, chat }: { data: PageData; chat?: ChatMessa
         <TabsTrigger value="run">The run</TabsTrigger>
         <TabsTrigger value="coins">Coins<TabsCount>{held.length || ''}</TabsCount></TabsTrigger>
         <TabsTrigger value="moves">Moves<TabsCount>{data.journal.length ? total : ''}</TabsCount></TabsTrigger>
-        {held.length > 0 && <TabsTrigger value="buzz">Buzz</TabsTrigger>}
+        {held.length > 0 && !readOnlyPreview && <TabsTrigger value="buzz">Buzz</TabsTrigger>}
         <TabsTrigger value="chat">Chat</TabsTrigger>
       </TabsList>
       <TabsContent value="run" className={s.folioTab}>
         <section className={`${s.surface} ${s.folioPanel}`} aria-label="The run so far">
           <ValueLine points={data.points} start={data.startSol} trades={trades}/>
-          <div className={s.folioLegend}><span><i data-line="value"/>This portfolio</span><span><i data-line="hold"/>Just holding</span>{trades.length > 0 && <span><i data-line="dot"/>Trades</span>}</div>
+          <div className={s.folioLegend}><span><i data-line="value"/>This portfolio</span>{hold !== undefined && <span><i data-line="hold"/>Just holding</span>}{trades.length > 0 && <span><i data-line="dot"/>Trades</span>}</div>
           {worth > 0 && <div className={s.folioAlloc} role="group" aria-label="What it holds, by share of its worth">
             {held.map(row => { const part = worthOf(row, data) / worth * 100; return <button key={row.id} type="button" style={{ flexGrow: part }} onClick={() => setCoinOpen(row.id)} title={`${row.symbol} ${Math.round(part)}%`}><CoinArt coin={{ ...row, header: null }}/><b>{row.symbol}</b><small>{Math.round(part)}%</small></button>; })}
             <span data-free style={{ flexGrow: data.cashSol / worth * 100 }} title={sol(data.cashSol, 2)}><b>SOL</b><small>{Math.round(data.cashSol / worth * 100)}%</small></span>
@@ -654,10 +672,10 @@ export function PortfolioView({ data, chat }: { data: PageData; chat?: ChatMessa
       <TabsContent value="coins" className={s.folioTab}>
         {held.length ? <ul className={s.folioCoins}>{held.map(row => <CoinCard key={row.id} coin={row} data={data} onOpen={() => setCoinOpen(row.id)}/>)}</ul>
           : <div className={s.folioEmpty}><BotAvatar role="research" size={56} mood={data.status === 'picking' ? 'scan' : undefined}/><b>{data.status === 'picking' ? 'Picking coins…' : data.status === 'stopped' ? 'Sold everything at the floor' : 'No coins right now'}</b></div>}
-        {sold.length > 0 && <SoldCoins data={data} onOpen={setOpen} sample={chat && sold.map(row => ({ id: row.id, address: row.address, symbol: row.symbol, gainSol: row.position.realizedSol - row.position.paidSol, exitedAt: row.exitedAt ?? row.pickedAt }))}/>}
+        {sold.length > 0 && <SoldCoins data={data} onOpen={setOpen} sample={(chat || readOnlyPreview) ? sold.map(row => ({ id: row.id, address: row.address, symbol: row.symbol, gainSol: row.position.realizedSol - row.position.paidSol, exitedAt: row.exitedAt ?? row.pickedAt })) : undefined}/>}
       </TabsContent>
       {held.length > 0 && <TabsContent value="buzz" className={s.folioTab}>{tab === 'buzz' && <Buzz coins={held} now={now}/>}</TabsContent>}
-      <TabsContent value="chat" className={s.folioTab}>{tab === 'chat' && <PortfolioChat data={data} sample={chat}/>}</TabsContent>
+      <TabsContent value="chat" className={s.folioTab}>{tab === 'chat' && chatContent}</TabsContent>
       <TabsContent value="moves" className={s.folioTab}>
         <section className={`${s.surface} ${s.folioPanel}`} aria-label="Every move">
           {(more || FEED.some(option => option.value !== 'all' && counts[option.value])) && <span className={`${s.seg} ${s.folioFeed}`} role="group" aria-label="Show">
@@ -667,9 +685,12 @@ export function PortfolioView({ data, chat }: { data: PageData; chat?: ChatMessa
         </section>
       </TabsContent>
     </Tabs>
-    {coin && <CoinDialog coin={coin} data={data} claims={findings?.coins.find(row => row.address === coin.address)?.claims} now={now} onClose={() => setCoinOpen(null)} onWhy={(() => { const entry = data.journal.find(row => row.coinId === coin.id && row.kind === 'pick') ?? data.journal.find(row => row.coinId === coin.id); return entry ? () => { setCoinOpen(null); setOpen(entry); } : undefined; })()}/>}
-    {open && <EntryDialog entry={data.journal.find(entry => entry.id === open.id) ?? open} data={data} onOpen={setOpen} onClose={() => setOpen(null)}/>}
-    {settings && <SettingsDialog data={data} onClose={() => setSettings(false)} onArchive={() => { setSettings(false); setArchiving(true); }}/>}
+    {coin && !readOnlyPreview && <CoinDialog coin={coin} data={data} claims={findings?.coins.find(row => row.address === coin.address)?.claims} now={now} onClose={() => setCoinOpen(null)} onWhy={(() => { const entry = data.journal.find(row => row.coinId === coin.id && row.kind === 'pick') ?? data.journal.find(row => row.coinId === coin.id); return entry ? () => { setCoinOpen(null); setOpen(entry); } : undefined; })()}/>}
+    {open && !readOnlyPreview && <EntryDialog entry={data.journal.find(entry => entry.id === open.id) ?? open} data={data} onOpen={setOpen} onClose={() => setOpen(null)}/>}
+    {settings && !readOnlyPreview && <SettingsDialog data={data as PageData} onClose={() => setSettings(false)} onArchive={() => { setSettings(false); setArchiving(true); }}/>}
+    {readOnlyPreview && coin && <ReadOnlyCoinDialog coin={coin} data={data} onClose={() => setCoinOpen(null)}/>}
+    {readOnlyPreview && open && <ReadOnlyEntryDialog entry={open} data={data} onClose={() => setOpen(null)}/>}
+    {readOnlyPreview && settings && <ReadOnlySettings data={data} onClose={() => setSettings(false)}/>}
     <Dialog open={archiving} onOpenChange={setArchiving}>
       <DialogContent className="sm:max-w-[26rem]">
         <DialogTitle>Archive {data.name}?</DialogTitle>
@@ -678,4 +699,33 @@ export function PortfolioView({ data, chat }: { data: PageData; chat?: ChatMessa
       </DialogContent>
     </Dialog>
   </div>;
+}
+
+/** The native settings layout, showing the actual snapshot without an account mutation. */
+function ReadOnlySettings({ data, onClose }: { data: ViewData; onClose: () => void }) {
+  return <Dialog open onOpenChange={open => { if (!open) onClose(); }}><DialogContent className={`${s.folioDialog} sm:max-w-[30rem]`}>
+    <DialogTitle className={s.folioDialogTitle}>Settings</DialogTitle><DialogDescription>Current paper portfolio settings. Muse’s proposal has not been applied.</DialogDescription>
+    <div className={s.folioLeash}><b>{LIMIT_TEXT.autonomy.label}</b><span>{AUTONOMY_TEXT[data.mandate.autonomy].label}</span></div>
+    <div className={s.folioTiles}>{loadout(data.mandate).map(([label, value, note]) => <span key={label}><small><SettingName name={label} note={note}/></small><b>{value}</b></span>)}</div>
+    <div className={s.folioDialogFoot}><small className={s.muted}>Read-only local build · no settings changed</small><Button size="sm" variant="secondary" onClick={onClose}>Done</Button></div>
+  </DialogContent></Dialog>;
+}
+function ReadOnlyEntryDialog({ entry, data, onClose }: { entry: Entry; data: ViewData; onClose: () => void }) {
+  const mark = entry.read?.mark;
+  return <Dialog open onOpenChange={open => { if (!open) onClose(); }}><DialogContent className={`${s.folioDialog} sm:max-w-[40rem]`}>
+    <div className={s.folioDialogHead}><BotAvatar role={entryTag(entry).role} size={40}/><div className={s.folioDialogText}><DialogTitle className={s.folioDialogTitle}>{entry.line}</DialogTitle><DialogDescription>{data.name} · {new Date(entry.at).toLocaleString()} · paper</DialogDescription></div></div>
+    {entry.sol !== undefined && <div className={s.folioFigures}><div><small>{entry.kind === 'pick' || entry.action === 'add' ? 'This buy' : 'SOL'}</small><b className={s.num}>{sol(entry.sol, 2)}</b></div></div>}
+    {mark && <div className={s.folioTiles}>{[['Price', price(mark.priceUsd)], ['24 h', pct(mark.change24hPct)], ['Liquidity', usd(mark.liquidityUsd)], ['Market cap', usd(mark.capUsd)], ['Volume, 24 h', usd(mark.volume24hUsd)]].map(([label, value]) => <span key={label}><small>{label}</small><b className={s.num}>{value}</b></span>)}</div>}
+    {entry.why && <div className={s.folioStep}><BotAvatar role="research" size={22}/><div><b>{entry.kind === 'pick' ? 'Why it picked it' : entry.kind === 'pass' ? 'Why it passed' : 'What it decided'}</b><p>{entry.why}</p></div></div>}
+    <div className={s.folioDialogFoot}><small className={s.muted}>Real MCP journal record · read only</small><Button size="sm" variant="secondary" onClick={onClose}>Done</Button></div>
+  </DialogContent></Dialog>;
+}
+function ReadOnlyCoinDialog({ coin, data, onClose }: { coin: CoinRow; data: ViewData; onClose: () => void }) {
+  return <Dialog open onOpenChange={open => { if (!open) onClose(); }}><DialogContent className={`${s.folioDialog} sm:max-w-[40rem]`}>
+    <div className={s.folioDialogHead}>{coinAvatar(coin, 'size-12 rounded-full')}<div className={s.folioDialogText}><DialogTitle>{coin.symbol}</DialogTitle><DialogDescription>{coin.name} · paper holding</DialogDescription></div></div>
+    <div className={s.folioTiles}>{[['Worth', sol(worthOf(coin, data), 2)], ['24 h', pct(coin.mark.change24hPct)], ['Liquidity', usd(coin.mark.liquidityUsd)], ['Market cap', usd(coin.mark.capUsd)]].map(([label,value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+    <p className={s.folioThesis}>{coin.thesis.why}</p>{coin.thesis.wrong && <p className={s.folioWrong}><b>Wrong if</b>{coin.thesis.wrong}</p>}
+    {'planSummary' in coin && coin.planSummary?.length ? <div className={s.folioChips}>{coin.planSummary.map(step => <span key={step} className={s.folioChip}>{step}</span>)}</div> : null}
+    <div className={s.folioDialogFoot}><small className={s.muted}>Real MCP holding · read only</small><Button size="sm" variant="secondary" onClick={onClose}>Done</Button></div>
+  </DialogContent></Dialog>;
 }

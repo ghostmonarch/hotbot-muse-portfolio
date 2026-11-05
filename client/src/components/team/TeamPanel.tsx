@@ -149,7 +149,7 @@ const botHref = (role: Role, strategyId?: string) => strategyId ? `${appHref('bo
 
 /** The column: the three bots as tabs with their totals and the rugs kept out over the last day; the picked bot shows its numbers by strategy
  *  and the coins it is on now. The buys that need you sit between the two. */
-function Column({ data, strategyId, kept, needs }: { data: HomeData; strategyId?: string; kept: Kept | null; needs: ReactNode }) {
+function Column({ data, strategyId, kept, needs, readOnly }: { data: HomeData; strategyId?: string; kept: Kept | null; needs: ReactNode; readOnly?: boolean }) {
   const [role, setRole] = useState<Role>('trader'), now = useNow(), rows = botRows(data, now, strategyId), motion = useMotion(data, strategyId), picked = rows.find(row => row.role === role)!;
   const chips = laneChips(data, strategyId)[role];
   return <>
@@ -159,7 +159,7 @@ function Column({ data, strategyId, kept, needs }: { data: HomeData; strategyId?
     {kept?.count ? <div className={s.keptLine}><ShieldCheck size={15}/><b>{count(kept.count)}</b>rugs blocked<small>24h</small></div> : null}
     {needs}
     <div className={s.botFocus} role="tabpanel">
-      <Link href={botHref(role, strategyId)} className={s.botFocusHead}><span className={s.grow}><b>{BOTS[role].name}</b><small>{picked.text}</small></span><ChevronRight size={16}/></Link>
+      <Link href={botHref(role, strategyId)} aria-disabled={readOnly || undefined} onClick={event => { if (readOnly) event.preventDefault(); }} className={s.botFocusHead}><span className={s.grow}><b>{BOTS[role].name}</b><small>{picked.text}</small></span><ChevronRight size={16}/></Link>
       <StrategyBars role={role} strategies={strategyId ? data.strategies.filter(row => row.id === strategyId) : data.strategies}/>
       {chips.length > 0 && <LaneChips chips={chips}/>}
     </div>
@@ -266,8 +266,16 @@ export function BotDialog({ role, data, strategyId, onClose }: { role: Role; dat
 
 /** The team beside every page, for the whole team or, on a strategy's page, that strategy's team: the column (the bots as tabs over what the
  *  picked one is on, and every buy that needs you), or the rail of faces. The rail's faces open a bot's dialog. The holdings live on Home and the strategy pages. */
-export function TeamPanel({ data, strategyId, layout }: { data: HomeData; strategyId?: string; layout: TeamLayout }) {
-  const [bot, setBot] = useState<Role | null>(null), command = useCommand(), setCollapsed = useSetAtom(teamCollapsedAtom), wide = useWide();
+type TeamPanelProps = { data: HomeData; strategyId?: string; layout: TeamLayout; readOnly?: boolean };
+export function TeamPanel(props: TeamPanelProps) {
+  return props.readOnly ? <TeamPanelView {...props}/> : <LiveTeamPanel {...props}/>;
+}
+function LiveTeamPanel(props: TeamPanelProps) {
+  const command = useCommand();
+  return <TeamPanelView {...props} onResume={() => { void command({ type: 'resumeAll' }); }}/>;
+}
+function TeamPanelView({ data, strategyId, layout, readOnly, onResume }: TeamPanelProps & { onResume?: () => void }) {
+  const [bot, setBot] = useState<Role | null>(null), setCollapsed = useSetAtom(teamCollapsedAtom), wide = useWide();
   // A strategy that left the list (archived, deleted) shows the whole team.
   const scope = strategyId ? data.strategies.find(row => row.id === strategyId) : undefined;
   const running = (scope ? [scope] : data.strategies).filter(row => row.status === 'running').length, live = data.worker.online && data.worker.liveView && !data.workspace.halted && running > 0;
@@ -277,17 +285,17 @@ export function TeamPanel({ data, strategyId, layout }: { data: HomeData; strate
   // The rugs kept out are counted for the whole team, so a strategy's page leaves them out.
   const kept = scope ? null : data.team.keptOut;
   // Buys waiting on you stay team-wide: one never hides because another strategy's page is open.
-  const needs = data.needs.length > 0 && <div className={s.panelNeeds}><NeedsYou items={data.needs} strategies={data.strategies}/></div>;
+  const needs = data.needs.length > 0 && <div className={s.panelNeeds}>{readOnly ? <p className={s.empty}>{data.needs.length} {data.needs.length === 1 ? 'buy awaits' : 'buys await'} your review in HOTBOT.</p> : <NeedsYou items={data.needs} strategies={data.strategies}/>}</div>;
   return <Sidebar side="right" variant="floating" collapsible="offcanvas" className={s.teamSidebar} data-layout={layout}>
     {layout === 'rail' ? <SidebarContent className={`${s.panel} ${s.rail}`}>
-      <Rail data={data} strategyId={scope?.id} kept={kept} status={status} live={live} onOpen={setBot} onExpand={wide ? () => setCollapsed(false) : undefined}/>
+      <Rail data={data} strategyId={scope?.id} kept={kept} status={status} live={live} onOpen={role => { if (!readOnly) setBot(role); }} onExpand={wide ? () => setCollapsed(false) : undefined}/>
     </SidebarContent> : <SidebarContent className={s.panel}>
       {/* The team's stop with its Resume. */}
       <div className={s.panelHead} role="status"><span className={s.dot} data-live={live || undefined} data-off={!live || undefined}/><b>{status}</b>
-        {data.workspace.halted && <Button size="xs" onClick={() => command({ type: 'resumeAll' })}>Resume</Button>}
+        {data.workspace.halted && <Button size="xs" disabled={readOnly} onClick={onResume}>Resume</Button>}
         <Button size="icon-sm" variant="ghost" className={s.railToggle} aria-label="Collapse the team" title="Collapse" onClick={() => setCollapsed(true)}><PanelRightClose/></Button></div>
-      <Column data={data} strategyId={scope?.id} kept={kept} needs={needs}/>
+      <Column data={data} strategyId={scope?.id} kept={kept} needs={needs} readOnly={readOnly}/>
     </SidebarContent>}
-    {bot && <BotDialog role={bot} data={data} strategyId={scope?.id} onClose={() => setBot(null)}/>}
+    {!readOnly && bot && <BotDialog role={bot} data={data} strategyId={scope?.id} onClose={() => setBot(null)}/>}
   </Sidebar>;
 }

@@ -1,9 +1,17 @@
 # Muse portfolio conversation
 
-A focused conversation over one HOTBOT portfolio: Muse Spark reads the portfolio
-and its records, explains one issue worth reviewing, and drafts a setting change.
-The interface exposes actual tool activity and expandable source records. A
-proposal stays unapplied; the person reviews it and makes any change in HOTBOT.
+Ask Muse about one HOTBOT portfolio in everyday language. Muse Spark reads the
+portfolio and its records, explains the trading team's activity and turns a
+request for more control into a setting proposal. The interface shows actual
+tool activity and expandable source records. A proposal stays unapplied; the
+person reviews it and makes any change in HOTBOT.
+
+Our vision is intelligent agentic trading as easy as talking to Muse. HotBot's
+existing MCP server also supports a custom connector in the Muse app. This new
+module brings Muse Spark into HotBot through Meta Model API; the recorded
+native conversation uses paper activity and has no trading or setting-write tools.
+
+[Watch the submitted walkthrough](https://youtu.be/N2t3SKpPfgo).
 
 ## Run locally
 
@@ -50,12 +58,13 @@ hosted multi-user service.
 
 Select one portfolio, then ask:
 
-> Review this portfolio's instructions and recent activity. Explain one mismatch
-> worth reviewing, and propose one change with evidence.
+> What has this portfolio's trading team been doing? Explain its recent
+> decisions in plain English and show the journal records behind your answer.
 
 Follow up:
 
-> Show the current setting, your proposed setting, and what remains uncertain.
+> Ask me before the next buy. Show the closest supported setting proposal,
+> its current value, its sources and what else the change would affect.
 
 If the record does not support a concrete proposal, the agent should explain
 what is missing. Missing data or provider failures are shown as errors, never
@@ -187,5 +196,5 @@ frames and the temporary browser profile are removed after the run.
 
 Running the recorder sends the two questions and the selected portfolio records
 through the already configured live providers. Review the resulting video before
-using it externally. The script was prepared and syntax checked separately;
-that does not establish that a successful recording has been made.
+using it externally. The submitted walkthrough used real Meta and MCP calls;
+each new recording still requires working provider access and actual account records.

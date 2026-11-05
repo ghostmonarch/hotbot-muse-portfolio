@@ -10,7 +10,7 @@ existing MCP server also supports a custom connector in the Muse app. This new
 module brings Muse Spark into HotBot through Meta Model API; the recorded
 native conversation uses paper activity and has no trading or setting-write tools.
 
-[Watch the submitted walkthrough](https://youtu.be/N2t3SKpPfgo).
+[Watch the submitted walkthrough](https://youtu.be/RcT1DuSwffI).
 
 ## Run locally
 
